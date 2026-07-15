@@ -2,106 +2,127 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { getArticles, trashArticle } from '../api/articles';
 import type { ArticleStatus } from '../types';
+import { Edit2, Trash2 } from 'lucide-react';
+import { useEffect } from 'react';
+
+const validStatuses = ["publish", "draft", "thrash"] as const;
 
 export default function PostsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   
-  const currentTab = (searchParams.get('status') as ArticleStatus) || 'publish';
+  const rawStatus = searchParams.get('status');
+  
+  // Normalize status
+  useEffect(() => {
+    if (!rawStatus || !validStatuses.includes(rawStatus as any)) {
+      setSearchParams({ status: 'publish' }, { replace: true });
+    }
+  }, [rawStatus, setSearchParams]);
 
-  const { data, isLoading, isError } = useQuery({
+  const currentTab = (validStatuses.includes(rawStatus as any) ? rawStatus : 'publish') as ArticleStatus;
+
+  const { data: articles, isLoading, isError } = useQuery({
     queryKey: ['articles', currentTab],
     queryFn: () => getArticles(100, 0, currentTab),
+    enabled: validStatuses.includes(currentTab as any),
   });
 
   const trashMutation = useMutation({
-    mutationFn: trashArticle,
+    mutationFn: (id: number) => trashArticle(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['articles'] });
-      alert('Article moved to trash');
     },
+    onError: (error: any) => {
+      alert(error?.response?.data?.error?.message || 'Failed to trash article');
+    }
   });
 
-  const handleTabChange = (status: ArticleStatus) => {
-    setSearchParams({ status });
-  };
-
   const handleTrash = (id: number) => {
-    if (confirm('Are you sure you want to move this article to trash?')) {
+    if (window.confirm('Are you sure you want to move this article to trash?')) {
       trashMutation.mutate(id);
     }
   };
 
+  const tabs = [
+    { id: 'publish', label: 'Published' },
+    { id: 'draft', label: 'Drafts' },
+    { id: 'thrash', label: 'Trashed' },
+  ];
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center border-b border-gray-200 pb-4">
-        <div className="flex space-x-4">
-          {(['publish', 'draft', 'thrash'] as ArticleStatus[]).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => handleTabChange(tab)}
-              className={`px-4 py-2 font-medium capitalize rounded-t-lg transition-colors ${
-                currentTab === tab
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {tab === 'thrash' ? 'Trashed' : tab === 'draft' ? 'Drafts' : 'Published'}
-            </button>
-          ))}
-        </div>
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold">All Posts</h2>
+        <button
+          onClick={() => navigate('/posts/new')}
+          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+        >
+          Add New
+        </button>
       </div>
 
-      {isLoading && <div className="text-gray-500">Loading articles...</div>}
-      {isError && <div className="text-red-500">Error loading articles.</div>}
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setSearchParams({ status: tab.id })}
+              className={`${
+                currentTab === tab.id
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </div>
 
-      {!isLoading && !isError && (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {data?.data?.length === 0 ? (
-                <tr>
-                  <td colSpan={3} className="px-6 py-4 text-center text-gray-500">No articles found.</td>
-                </tr>
-              ) : (
-                data?.data?.map((article) => (
-                  <tr key={article.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{article.title}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{article.category}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-4">
-                      <button
-                        onClick={() => navigate(`/posts/${article.id}/edit`)}
-                        className="text-indigo-600 hover:text-indigo-900"
-                        title="Edit Article"
-                      >
-                        Edit
-                      </button>
-                      {currentTab !== 'thrash' && (
-                        <button
-                          onClick={() => handleTrash(article.id)}
-                          className="text-red-600 hover:text-red-900"
-                          title="Trash Article"
-                          disabled={trashMutation.isPending}
-                        >
-                          Trash
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <div className="bg-white shadow overflow-hidden sm:rounded-md">
+        {isLoading && <div className="p-4 text-gray-500">Loading...</div>}
+        {isError && <div className="p-4 text-red-500">Error loading posts.</div>}
+        
+        <ul className="divide-y divide-gray-200">
+          {articles?.data?.length === 0 ? (
+            <li className="p-4 text-gray-500 text-center">No articles found in this tab.</li>
+          ) : (
+            articles?.data?.map((article) => (
+              <li key={article.id} className="p-4 hover:bg-gray-50 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900">{article.title}</h3>
+                  <p className="text-sm text-gray-500 mt-1">Category: {article.category}</p>
+                </div>
+                <div className="flex space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/posts/${article.id}/edit`)}
+                    className="p-2 text-gray-400 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
+                    aria-label="Edit article"
+                    title="Edit article"
+                  >
+                    <Edit2 className="w-5 h-5" />
+                  </button>
+                  {currentTab !== 'thrash' && (
+                    <button
+                      type="button"
+                      onClick={() => handleTrash(article.id)}
+                      disabled={trashMutation.isPending}
+                      className="p-2 text-gray-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 rounded disabled:opacity-50"
+                      aria-label="Move article to trash"
+                      title="Move article to trash"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))
+          )}
+        </ul>
+      </div>
     </div>
   );
 }

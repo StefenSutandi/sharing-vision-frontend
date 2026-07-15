@@ -9,7 +9,7 @@ Frontend application for the Sharing Vision fullstack engineer technical test, d
 - Responsive layout with Tailwind CSS
 
 ## Technology Stack
-- React 18 + TypeScript
+- React 19 + TypeScript
 - Vite
 - React Router DOM
 - TanStack Query v5
@@ -17,6 +17,7 @@ Frontend application for the Sharing Vision fullstack engineer technical test, d
 - Tailwind CSS v4
 - Axios
 - Vitest & React Testing Library
+- Lucide React (Icons)
 
 ## Environment Configuration
 Copy `.env.example` to `.env`:
